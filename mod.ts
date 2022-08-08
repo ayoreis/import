@@ -3,7 +3,9 @@ import { denoPlugin } from 'https://deno.land/x/esbuild_deno_loader@0.5.2/mod.ts
 
 const AsyncFunction = (async function () {}).constructor
 
-export async function importModule(moduleName: string,){
+export async function importModule(
+    moduleName: string
+): Promise<Record<'default' | string, any>> {
     try {
         return await import(moduleName)
     } catch {
