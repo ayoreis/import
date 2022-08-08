@@ -1,7 +1,9 @@
 import * as esbuild from 'https://deno.land/x/esbuild@v0.14.53/wasm.js'
 import { denoPlugin } from 'https://deno.land/x/esbuild_deno_loader@0.5.2/mod.ts'
 
-export async function importModule(moduleName: string,) {
+const AsyncFunction = (async function () {}).constructor
+
+export async function importModule(moduleName: string,){
     try {
         return await import(moduleName)
     } catch {
@@ -11,13 +13,22 @@ export async function importModule(moduleName: string,) {
             bundle: true,
             plugins: [ denoPlugin() ],
             write: false,
-            globalName: 'result',
             logLevel: 'silent',
+            format: 'esm',
             entryPoints: [ import.meta.resolve(moduleName) ],
         })
 
         esbuild.stop()
 
-        return new Function(result.outputFiles[ 0 ].text.replace('var result =', 'return'))()
+        const { text } = result.outputFiles[ 0 ] 
+        const [ before, after ] = text.split('export {')
+        
+        const body =
+            before
+            + (after
+            ? 'return {' + after.replaceAll(/(\w+) (as) (\w+)/gi, '$3: $1')
+            : '')
+
+        return AsyncFunction(body)()
     }
 }
