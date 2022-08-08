@@ -7,9 +7,9 @@ const AsyncFunction = (async function () {}).constructor
 export async function importModule(
     moduleName: string
 ): Promise<Record<'default' | string, any>> {
-    // try {
-    //     return await import(moduleName)
-    // } catch {
+    try {
+        return await import(moduleName)
+    } catch {
         esbuild.initialize({ worker: false })
 
         const result = await esbuild.build({
@@ -33,4 +33,5 @@ export async function importModule(
             : '')
             
         return AsyncFunction(body)()
+    }
 }
