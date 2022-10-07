@@ -1,67 +1,141 @@
-import * as esbuild from 'https://deno.land/x/esbuild@v0.14.53/wasm.js'
-import { denoPlugin } from 'https://deno.land/x/esbuild_deno_loader@0.5.2/mod.ts'
-import stripShebang from 'https://esm.sh/strip-shebang@2.0.0'
-import { encode } from 'https://deno.land/std@0.151.0/encoding/base64url.ts'
-import { toFileUrl } from 'https://deno.land/std@0.151.0/path/mod.ts'
+import {
+	esbuildNative,
+	esbuildWASM,
+	dirname,
+	toFileUrl,
+	DenoConfigurationFile,
+	ErrorStackParser,
+	resolveModuleSpecifier,
+	denoPlugin,
+	stripShebang,
+} from './deps.ts'
 
-export type Module = Promise<Record<'default' | string, any>>
+export type Module = Record<string, unknown>
 
-const AsyncFunction = (async function () {}).constructor
-
-function moduleToAsyncFunction(moduleString: string): Module {
-    const [ before, after ] = moduleString.split('export {')
-          
-    const body =
-        stripShebang(before)
-        + (after
-        ? 'return {' + after.replaceAll(/(\w+) (as) (\w+)/gi, '$3: $1')
-        : '')
-        
-    return AsyncFunction(body)()
+export interface ImportModuleOptions {
+	/** Force the use of the ponyfill even when native dynamic import could be used. */
+	force?: boolean
 }
 
-export async function importModule(moduleName: string): Module {
-    try {
-        return await import(moduleName)
-    } catch {
-        esbuild.initialize({ worker: false })
-
-        const result = await esbuild.build({
-            bundle: true,
-            entryPoints: [ import.meta.resolve(moduleName) ],
-            plugins: [ denoPlugin() ],
-            write: false,
-            logLevel: 'silent',
-            format: 'esm',
-        })
-
-        esbuild.stop()
-
-        return moduleToAsyncFunction(result.outputFiles[ 0 ].text)
-    }
+export interface ImportStringOptions {
+	/** The URL to use as a base for imports and exports in the string. */
+	base?: URL | string
 }
 
-export async function importString(moduleString: string): Module {
-    try {
-        return await import(`data:text/tsx;base64,${ encode(moduleString) }`)
-    } catch {
-        esbuild.initialize({ worker: false })
+const posibleDenoConfigurationFilepaths = [
+	new URL(`${toFileUrl(Deno.cwd()).href}/deno.json`),
+	new URL(`${toFileUrl(Deno.cwd()).href}/deno.jsonc`),
+] as const
 
-        const result = await esbuild.build({
-            bundle: true,
-            plugins: [ denoPlugin() ],
-            write: false,
-            logLevel: 'silent',
-            format: 'esm',
-            stdin: {
-                contents: moduleString,
-                loader: 'tsx',
-                sourcefile: toFileUrl(Deno.cwd()).href
-            },
-        })
+const isDeno = navigator.userAgent === `Deno/${Deno.version.deno}`
+const isDenoCLI = isDeno && Deno.run
+const isDenoCompiled = isDenoCLI && dirname(Deno.execPath()) === Deno.cwd()
+const isDenoDeploy = isDeno && !isDenoCLI && Deno.env.get('DENO_REGION')
+const esbuild = isDenoCLI ? esbuildNative : esbuildWASM
+const AsyncFunction = async function () {}.constructor
 
-        esbuild.stop()
+const compilerOptions = isDeno ? await getDenoCompilerOptions() : null
 
-        return moduleToAsyncFunction(result.outputFiles[ 0 ].text)
-    }
+const sharedEsbuildOptions: esbuildWASM.BuildOptions = {
+	jsx: ({
+		'preserve': 'preserve',
+		'react': 'transform',
+		'react-jsx': 'automatic',
+		'react-jsxdev': 'automatic',
+		'react-native': 'preserve',
+	}[compilerOptions?.jsx ?? 'react'] ??
+		'transform') as esbuildNative.BuildOptions['jsx'],
+	jsxDev: compilerOptions?.jsx === 'react-jsxdev',
+	jsxFactory: compilerOptions?.jsxFactory ?? 'h',
+	jsxFragment: compilerOptions?.jsxFragmentFactory ?? 'Fragment',
+	jsxImportSource: compilerOptions?.jsxImportSource,
+	bundle: true,
+	platform: 'neutral',
+	write: false,
+	logLevel: 'silent',
+	plugins: [denoPlugin({ useActiveImportMap: true })],
+}
+
+async function readTextFile(filepath: URL | string) {
+	const base = ErrorStackParser.parse(new Error())[1].fileName
+	const url = new URL(filepath, base)
+
+	return await (await fetch(url)).text()
+}
+
+async function getDenoCompilerOptions() {
+	for (const posibleDenoConfigurationFilepath of posibleDenoConfigurationFilepaths) {
+		try {
+			return (
+				(
+					JSON.parse(
+						await readTextFile(posibleDenoConfigurationFilepath),
+					) as DenoConfigurationFile
+				).compilerOptions ?? null
+			)
+		} catch {}
+	}
+
+	return null
+}
+
+async function buildAndEvaluate(options: Record<string, unknown>) {
+	!isDenoCLI && esbuild.initialize({ worker: !!Worker })
+
+	const buildResult = await esbuild.build(
+		Object.assign(options, sharedEsbuildOptions),
+	)
+
+	isDenoCLI && esbuild.stop()
+
+	const { text = '' } = buildResult.outputFiles?.[0] ?? {}
+	const [before, after = '}'] = text.split('export {')
+	const body =
+		stripShebang(before).replaceAll('import.meta', '{}') +
+		'return {' +
+		after.replaceAll(
+			/(?<local>\w+) (?:as) (?<exported>\w+)/gi,
+			'$<exported>: $<local>',
+		)
+
+	return AsyncFunction(body)()
+}
+
+export async function importModule(
+	moduleName: string,
+	{ force = false }: ImportModuleOptions = {},
+): Promise<Module> {
+	try {
+		if (force) throw new Error('Forced')
+
+		return await import(moduleName)
+	} catch (error) {
+		if (!isDenoCompiled && !isDenoDeploy && error.message !== 'Forced')
+			throw error
+
+		const base = ErrorStackParser.parse(new Error())[1].fileName
+		const entryPoint = resolveModuleSpecifier(moduleName, base, {
+			useActiveImportMap: true,
+		})
+
+		return await buildAndEvaluate({
+			entryPoints: [entryPoint],
+		})
+	}
+}
+
+export async function importString(
+	moduleString: string,
+
+	{
+		base = ErrorStackParser.parse(new Error())[0].fileName,
+	}: ImportStringOptions = {},
+) {
+	return await buildAndEvaluate({
+		stdin: {
+			contents: moduleString,
+			loader: 'tsx',
+			sourcefile: base instanceof URL ? base.href : base,
+		},
+	})
 }
