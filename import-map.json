@@ -1,0 +1,5 @@
+{
+	"imports": {
+		"fixture": "./fixture/mod1.ts"
+	}
+}
