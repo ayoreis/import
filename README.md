@@ -12,7 +12,7 @@ A [ponyfill](//github.com/sindresorhus/ponyfill) for using [dynamic imports](//d
 ## Example
 
 ```ts
-import { importModule } from 'https://deno.land/x/dynamic_import_ponyfill@v0.1.4/mod.ts'
+import { importModule } from 'https://deno.land/x/dynamic_import_ponyfill@v0.1.5/mod.ts'
 
 if (Math.random() > 0.5) {
 	await importModule('./foo.ts')
@@ -24,7 +24,7 @@ if (Math.random() > 0.5) {
 This module also exports an awesome function which evaluates code from a string containing `import` and `exports` statements.
 
 ```tsx
-import { importString } from 'https://deno.land/x/dynamic_import_ponyfill@v0.1.4/mod.ts'
+import { importString } from 'https://deno.land/x/dynamic_import_ponyfill@v0.1.5/mod.ts'
 
 console.log(await importString('export const foo = "bar"'))
 ```
