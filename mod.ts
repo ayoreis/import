@@ -22,17 +22,19 @@ export interface ImportStringOptions {
 	base?: URL | string
 }
 
-const posibleDenoConfigurationFilepaths = [
-	new URL(`${toFileUrl(Deno.cwd()).href}/deno.json`),
-	new URL(`${toFileUrl(Deno.cwd()).href}/deno.jsonc`),
-] as const
-
-const isDeno = navigator.userAgent === `Deno/${Deno.version.deno}`
+const denoUserAgentRegex =
+	/^Deno\/(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+const isDeno = denoUserAgentRegex.test(navigator.userAgent)
 const isDenoCLI = isDeno && Deno.run
 const isDenoCompiled = isDenoCLI && dirname(Deno.execPath()) === Deno.cwd()
 const isDenoDeploy = isDeno && !isDenoCLI && Deno.env.get('DENO_REGION')
 const esbuild = isDenoCLI ? esbuildNative : esbuildWASM
 const AsyncFunction = async function () {}.constructor
+
+const posibleDenoConfigurationFilepaths = [
+	new URL(`${toFileUrl(Deno.cwd()).href}/deno.json`),
+	new URL(`${toFileUrl(Deno.cwd()).href}/deno.jsonc`),
+] as const
 
 const compilerOptions = isDeno ? await getDenoCompilerOptions() : null
 
