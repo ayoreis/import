@@ -96,7 +96,7 @@ async function buildAndEvaluate(options: Record<string, unknown>) {
 		stripShebang(before).replaceAll('import.meta', '{}') +
 		'return {' +
 		after.replaceAll(
-			/(?<local>\w+) (?:as) (?<exported>\w+)/gi,
+			/(?<local>[\w\W]+) as (?<exported>[\w\W]+)/g,
 			'$<exported>: $<local>',
 		)
 
