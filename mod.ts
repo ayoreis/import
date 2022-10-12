@@ -82,7 +82,7 @@ async function getDenoCompilerOptions() {
 }
 
 async function buildAndEvaluate(options: Record<string, unknown>) {
-	!isDenoCLI && esbuild.initialize({ worker: !!Worker })
+	!isDenoCLI && esbuild.initialize({ worker: typeof Worker !== 'undefined' })
 
 	const buildResult = await esbuild.build(
 		Object.assign(options, sharedEsbuildOptions),
