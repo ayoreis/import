@@ -1,11 +1,11 @@
 {
+	"compilerOptions": {
+		"jsxFactory": "t"
+	},
+
 	"importMap": "./import-map.json",
 
 	"tasks": {
 		"test": "deno test -A"
-	},
-
-	"compilerOptions": {
-		"jsx": "preserve"
 	}
 }

@@ -1,112 +1,163 @@
-import {
-	esbuildNative,
-	esbuildWASM,
-	dirname,
-	toFileUrl,
-	DenoConfigurationFile,
-	ErrorStackParser,
-	resolveModuleSpecifier,
-	denoPlugin,
-	stripShebang,
-} from './deps.ts'
+import type { DenoConfigurationFile } from './_dependencies.ts'
 
-export type Module = Record<string, unknown>
+import {
+	denoPlugin,
+	dirname,
+	ErrorStackParser,
+	join,
+	nativeEsbuild,
+	resolveImportMap,
+	resolveModuleSpecifier,
+	stripShebang,
+	toFileUrl,
+	WebAssemblyEsbuild,
+} from './_dependencies.ts'
+
+import { readTextFile } from './_read-text-file.ts'
 
 export interface ImportModuleOptions {
-	/** Force the use of the ponyfill even when native dynamic import could be used. */
+	/** Use of the ponyfill when native is available */
 	force?: boolean
 }
 
 export interface ImportStringOptions {
-	/** The URL to use as a base for imports and exports in the string. */
-	base?: URL | string
+	/** URL to use as the base for imports and exports */
+	base?: URL
 }
 
-const denoUserAgentRegex =
+/**
+ * https://deno.com/blog/v1.22#navigatoruseragent
+ *
+ * https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+ */
+const DENO_USER_AGENT =
 	/^Deno\/(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-const isDeno = denoUserAgentRegex.test(navigator.userAgent)
-const isDenoCLI = isDeno && Deno.run
-const isDenoCompiled = isDenoCLI && dirname(Deno.execPath()) === Deno.cwd()
-const isDenoDeploy = isDeno && !isDenoCLI && Deno.env.get('DENO_REGION')
-const esbuild = isDenoCLI ? esbuildNative : esbuildWASM
-const AsyncFunction = async function () {}.constructor
 
-const posibleDenoConfigurationFilepaths = [
-	new URL(`${toFileUrl(Deno.cwd()).href}/deno.json`),
-	new URL(`${toFileUrl(Deno.cwd()).href}/deno.jsonc`),
-] as const
+const isDeno = DENO_USER_AGENT.test(navigator.userAgent)
+const isDenoCLI = isDeno && !!Deno?.run
+const isDenoCompiled = isDeno && dirname(Deno.execPath()) === Deno.cwd()
+const isDenoDeploy = isDeno && !isDenoCLI && !!Deno.env.get('DENO_REGION')
+const denoCWDURL = isDeno ? toFileUrl(Deno.cwd()) : null
 
-const compilerOptions = isDeno ? await getDenoCompilerOptions() : null
+const posibleDenoConfigurationURLs = isDeno
+	? ([
+			new URL(`${denoCWDURL}/deno.json`),
+			new URL(`${denoCWDURL}/deno.jsonc`),
+	  ] as const)
+	: null
 
-const sharedEsbuildOptions: esbuildWASM.BuildOptions = {
-	jsx: ({
+const denoConfiguration = isDeno ? await getDenoConfiguration() : null
+
+const importMapURL = denoConfiguration?.importMap
+	? toFileUrl(join(Deno.cwd(), denoConfiguration.importMap))
+	: undefined
+
+const importMap = importMapURL
+	? resolveImportMap(
+			JSON.parse(await readTextFile(importMapURL)),
+			importMapURL,
+	  )
+	: null
+
+const esbuild: typeof WebAssemblyEsbuild = isDenoCLI
+	? nativeEsbuild
+	: WebAssemblyEsbuild
+
+const sharedEsbuildOptions: WebAssemblyEsbuild.BuildOptions = {
+	jsx: {
 		'preserve': 'preserve',
 		'react': 'transform',
 		'react-jsx': 'automatic',
 		'react-jsxdev': 'automatic',
 		'react-native': 'preserve',
-	}[compilerOptions?.jsx ?? 'react'] ??
-		'transform') as esbuildNative.BuildOptions['jsx'],
-	jsxDev: compilerOptions?.jsx === 'react-jsxdev',
-	jsxFactory: compilerOptions?.jsxFactory ?? 'h',
-	jsxFragment: compilerOptions?.jsxFragmentFactory ?? 'Fragment',
-	jsxImportSource: compilerOptions?.jsxImportSource,
+	}[
+		denoConfiguration?.compilerOptions?.jsx ?? 'react'
+	] as WebAssemblyEsbuild.BuildOptions['jsx'],
+
+	jsxDev: denoConfiguration?.compilerOptions?.jsx === 'react-jsxdev',
+	jsxFactory: denoConfiguration?.compilerOptions?.jsxFactory ?? 'h',
+
+	jsxFragment:
+		denoConfiguration?.compilerOptions?.jsxFragmentFactory ?? 'Fragment',
+
+	jsxImportSource: denoConfiguration?.compilerOptions?.jsxImportSource,
 	bundle: true,
 	platform: 'neutral',
 	write: false,
 	logLevel: 'silent',
-	plugins: [denoPlugin({ useActiveImportMap: true })],
+	// @ts-ignore The plugin's types have not been updated
+	plugins: [denoPlugin({ importMapURL, loader: 'portable' })],
 }
 
-async function readTextFile(filepath: URL | string) {
-	const base = ErrorStackParser.parse(new Error())[1].fileName
-	const url = new URL(filepath, base)
+const AsyncFunction = async function () {}.constructor
 
-	return await (await fetch(url)).text()
-}
-
-async function getDenoCompilerOptions() {
-	for (const posibleDenoConfigurationFilepath of posibleDenoConfigurationFilepaths) {
+async function getDenoConfiguration() {
+	for (const posibleDenoConfigurationURL of posibleDenoConfigurationURLs!) {
 		try {
-			return (
-				(
-					JSON.parse(
-						await readTextFile(posibleDenoConfigurationFilepath),
-					) as DenoConfigurationFile
-				).compilerOptions ?? null
-			)
+			return JSON.parse(
+				await readTextFile(posibleDenoConfigurationURL),
+			) as DenoConfigurationFile
+			// deno-lint-ignore no-empty
 		} catch {}
 	}
 
 	return null
 }
 
-async function buildAndEvaluate(options: Record<string, unknown>) {
-	!isDenoCLI && esbuild.initialize({ worker: typeof Worker !== 'undefined' })
+async function buildAndEvaluate(
+	options: WebAssemblyEsbuild.BuildOptions,
+	url: URL,
+) {
+	if (!isDenoCLI) {
+		esbuild.initialize({ worker: typeof Worker !== 'undefined' })
+	}
 
 	const buildResult = await esbuild.build(
-		Object.assign(options, sharedEsbuildOptions),
+		Object.assign({}, sharedEsbuildOptions, options),
 	)
 
-	isDenoCLI && esbuild.stop()
+	if (isDenoCLI) {
+		esbuild.stop()
+	}
 
-	const { text = '' } = buildResult.outputFiles?.[0] ?? {}
+	const { text = '' } = buildResult.outputFiles![0]
 	const [before, after = '}'] = text.split('export {')
 	const body =
-		stripShebang(before).replaceAll('import.meta', '{}') +
+		stripShebang(before).replaceAll(
+			'import.meta',
+			`{ main: false, url: '${url}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
+		) +
 		'return {' +
 		after.replaceAll(
-			/(?<local>[\w\W]+) as (?<exported>[\w\W]+)/g,
+			/(?<local>\w+) as (?<exported>\w+)/g,
 			'$<exported>: $<local>',
 		)
 
-	return AsyncFunction(body)()
+	const exports = await AsyncFunction(body)()
+
+	const prototypedAndToStringTaggedExports = Object.assign(
+		Object.create(null),
+		exports,
+		{
+			[Symbol.toStringTag]: 'Module',
+		},
+	)
+
+	const sortedExports = Object.fromEntries(
+		Object.keys(prototypedAndToStringTaggedExports)
+			.sort()
+			.map((key) => [key, prototypedAndToStringTaggedExports[key]]),
+	)
+
+	const sealedExports = Object.seal(sortedExports)
+
+	return sealedExports
 }
 
-export async function importModule(
+export async function importModule<Module = Record<string, unknown>>(
 	moduleName: string,
 	{ force = false }: ImportModuleOptions = {},
-): Promise<Module> {
+) {
 	try {
 		if (force) throw new Error('Forced')
 
@@ -116,28 +167,39 @@ export async function importModule(
 			throw error
 
 		const base = ErrorStackParser.parse(new Error())[1].fileName
-		const entryPoint = resolveModuleSpecifier(moduleName, base, {
-			useActiveImportMap: true,
-		})
 
-		return await buildAndEvaluate({
-			entryPoints: [entryPoint],
-		})
+		const resolved = resolveModuleSpecifier(
+			moduleName,
+			importMap ?? {},
+			base,
+		)
+
+		return (await buildAndEvaluate(
+			{
+				entryPoints: [resolved],
+			},
+
+			new URL(resolved),
+		)) as Module
 	}
 }
 
-export async function importString(
+export async function importString<Module = Record<string, unknown>>(
 	moduleString: string,
 
 	{
-		base = ErrorStackParser.parse(new Error())[0].fileName,
+		base = new URL(ErrorStackParser.parse(new Error())[0].fileName),
 	}: ImportStringOptions = {},
 ) {
-	return await buildAndEvaluate({
-		stdin: {
-			contents: moduleString,
-			loader: 'tsx',
-			sourcefile: base instanceof URL ? base.href : base,
+	return (await buildAndEvaluate(
+		{
+			stdin: {
+				contents: moduleString,
+				loader: 'tsx',
+				sourcefile: base.href,
+			},
 		},
-	})
+
+		base,
+	)) as Module
 }

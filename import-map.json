@@ -1,5 +1,5 @@
 {
 	"imports": {
-		"fixture": "./fixture/mod1.ts"
+		"test": "./test-modules/module-1.tsx"
 	}
 }
