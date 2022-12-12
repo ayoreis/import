@@ -1,5 +1,5 @@
 {
 	"imports": {
-		"test": "./test-modules/module-1.tsx"
+		"test": "./test-modules/1.tsx"
 	}
 }

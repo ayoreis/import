@@ -1,4 +1,4 @@
-import './module-2.ts'
+import './2.ts'
 
 function t(...args: unknown[]) {
 	console.log(args)
