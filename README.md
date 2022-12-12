@@ -1,11 +1,11 @@
 # Dynamic import ponyfill
 
-A [ponyfill](//github.com/sindresorhus/ponyfill) for using [dynamic imports](//developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) in context without, like [Deno Deploy](//deno.com/deploy), [Deno compiled executables](//deno.land/manual@v1.26.1/tools/compiler) and older browsers (see #4).
+A [ponyfill](//github.com/sindresorhus/ponyfill) for using [dynamic imports](//developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) in contexts without, like [Deno Deploy](//deno.com/deploy), [Deno compiled executables](//deno.land/manual@v1.28.3/tools/compiler) and older browsers (see #4).
 
 ## Notes
 
-1. The [`assert`](//github.com/tc39/proposal-import-assertions) option does not yet work (see #3).
-1. [JSX](//reactjs.org/docs/introducing-jsx.html) will work if configured in [`deno.json`](//deno.land/manual@v1.28.3/getting_started/configuration_file) or [`deno.jsonc`](//deno.land/manual@v1.28.3/getting_started/configuration_file).
+1. The [`assert`](//github.com/tc39/proposal-import-assertions) option does not yet work (see #3)
+1. [JSX](//reactjs.org/docs/introducing-jsx.html) will work if configured in [`deno.json`](//deno.land/manual@v1.28.3/getting_started/configuration_file) or [`deno.jsonc`](//deno.land/manual@v1.28.3/getting_started/configuration_file)
 1. `import.meta` will be `{ main: false, url: '...', resolve(specifier) { return new URL(specifier, this.url).href } }`.
 
 ## Example
