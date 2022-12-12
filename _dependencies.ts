@@ -6,8 +6,8 @@ export {
 	toFileUrl,
 } from 'https://deno.land/std@0.167.0/path/mod.ts'
 
-export * as nativeEsbuild from 'https://deno.land/x/esbuild@v0.15.18/mod.js'
-export * as WebAssemblyEsbuild from 'https://deno.land/x/esbuild@v0.15.18/wasm.js'
+export * as nativeEsbuild from 'https://deno.land/x/esbuild@v0.15.10/mod.js'
+export * as webAssemblyEsbuild from 'https://deno.land/x/esbuild@v0.15.10/wasm.js'
 export { denoPlugin } from 'https://deno.land/x/esbuild_deno_loader@0.6.0/mod.ts'
 
 export {

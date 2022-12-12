@@ -10,7 +10,7 @@ import {
 	resolveModuleSpecifier,
 	stripShebang,
 	toFileUrl,
-	WebAssemblyEsbuild,
+	webAssemblyEsbuild,
 } from './_dependencies.ts'
 
 import { readTextFile } from './_read-text-file.ts'
@@ -59,11 +59,11 @@ const importMap = importMapURL
 	  )
 	: null
 
-const esbuild: typeof WebAssemblyEsbuild = isDenoCLI
+const esbuild: typeof webAssemblyEsbuild = isDenoCLI
 	? nativeEsbuild
-	: WebAssemblyEsbuild
+	: webAssemblyEsbuild
 
-const sharedEsbuildOptions: WebAssemblyEsbuild.BuildOptions = {
+const sharedEsbuildOptions: webAssemblyEsbuild.BuildOptions = {
 	jsx: {
 		'preserve': 'preserve',
 		'react': 'transform',
@@ -72,7 +72,7 @@ const sharedEsbuildOptions: WebAssemblyEsbuild.BuildOptions = {
 		'react-native': 'preserve',
 	}[
 		denoConfiguration?.compilerOptions?.jsx ?? 'react'
-	] as WebAssemblyEsbuild.BuildOptions['jsx'],
+	] as webAssemblyEsbuild.BuildOptions['jsx'],
 
 	jsxDev: denoConfiguration?.compilerOptions?.jsx === 'react-jsxdev',
 	jsxFactory: denoConfiguration?.compilerOptions?.jsxFactory ?? 'h',
@@ -105,7 +105,7 @@ async function getDenoConfiguration() {
 }
 
 async function buildAndEvaluate(
-	options: WebAssemblyEsbuild.BuildOptions,
+	options: webAssemblyEsbuild.BuildOptions,
 	url: URL,
 ) {
 	if (!isDenoCLI) {
