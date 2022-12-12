@@ -166,7 +166,7 @@ export async function importModule<Module = Record<string, unknown>>(
 		if (!isDenoCompiled && !isDenoDeploy && error.message !== 'Forced')
 			throw error
 
-		const base = ErrorStackParser.parse(new Error())[1].fileName
+		const base = ErrorStackParser.parse(new Error())[0].fileName
 
 		const resolved = resolveModuleSpecifier(
 			moduleName,
