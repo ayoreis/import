@@ -3,6 +3,15 @@
 		"jsxFactory": "t"
 	},
 
+	"fmt": {
+		"options": {
+			"lineWidth": 60,
+			"semiColons": false,
+			"singleQuote": true,
+			"useTabs": true
+		}
+	},
+
 	"importMap": "./import-map.json",
 
 	"tasks": {
