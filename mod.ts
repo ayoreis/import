@@ -35,18 +35,22 @@ const DENO_USER_AGENT =
 
 const isDeno = DENO_USER_AGENT.test(navigator.userAgent)
 const isDenoCLI = isDeno && !!Deno?.run
-const isDenoCompiled = isDeno && dirname(Deno.execPath()) === Deno.cwd()
-const isDenoDeploy = isDeno && !isDenoCLI && !!Deno.env.get('DENO_REGION')
+const isDenoCompiled = isDeno &&
+	dirname(Deno.execPath()) === Deno.cwd()
+const isDenoDeploy = isDeno && !isDenoCLI &&
+	!!Deno.env.get('DENO_REGION')
 const denoCWDURL = isDeno ? toFileUrl(Deno.cwd()) : null
 
 const posibleDenoConfigurationURLs = isDeno
 	? ([
-			new URL(`${denoCWDURL}/deno.json`),
-			new URL(`${denoCWDURL}/deno.jsonc`),
-	  ] as const)
+		new URL(`${denoCWDURL}/deno.json`),
+		new URL(`${denoCWDURL}/deno.jsonc`),
+	] as const)
 	: null
 
-const denoConfiguration = isDeno ? await getDenoConfiguration() : null
+const denoConfiguration = isDeno
+	? await getDenoConfiguration()
+	: null
 
 const importMapURL = denoConfiguration?.importMap
 	? toFileUrl(join(Deno.cwd(), denoConfiguration.importMap))
@@ -54,45 +58,54 @@ const importMapURL = denoConfiguration?.importMap
 
 const importMap = importMapURL
 	? resolveImportMap(
-			JSON.parse(await readTextFile(importMapURL)),
-			importMapURL,
-	  )
+		JSON.parse(await readTextFile(importMapURL)),
+		importMapURL,
+	)
 	: null
 
 const esbuild: typeof webAssemblyEsbuild = isDenoCLI
 	? nativeEsbuild
 	: webAssemblyEsbuild
 
-const sharedEsbuildOptions: webAssemblyEsbuild.BuildOptions = {
-	jsx: {
-		'preserve': 'preserve',
-		'react': 'transform',
-		'react-jsx': 'automatic',
-		'react-jsxdev': 'automatic',
-		'react-native': 'preserve',
-	}[
-		denoConfiguration?.compilerOptions?.jsx ?? 'react'
-	] as webAssemblyEsbuild.BuildOptions['jsx'],
+const sharedEsbuildOptions:
+	webAssemblyEsbuild.BuildOptions = {
+		jsx: {
+			'preserve': 'preserve',
+			'react': 'transform',
+			'react-jsx': 'automatic',
+			'react-jsxdev': 'automatic',
+			'react-native': 'preserve',
+		}[
+			denoConfiguration?.compilerOptions?.jsx ?? 'react'
+		] as webAssemblyEsbuild.BuildOptions['jsx'],
 
-	jsxDev: denoConfiguration?.compilerOptions?.jsx === 'react-jsxdev',
-	jsxFactory: denoConfiguration?.compilerOptions?.jsxFactory ?? 'h',
+		jsxDev: denoConfiguration?.compilerOptions?.jsx ===
+			'react-jsxdev',
+		jsxFactory:
+			denoConfiguration?.compilerOptions?.jsxFactory ?? 'h',
 
-	jsxFragment:
-		denoConfiguration?.compilerOptions?.jsxFragmentFactory ?? 'Fragment',
+		jsxFragment: denoConfiguration?.compilerOptions
+			?.jsxFragmentFactory ?? 'Fragment',
 
-	jsxImportSource: denoConfiguration?.compilerOptions?.jsxImportSource,
-	bundle: true,
-	platform: 'neutral',
-	write: false,
-	logLevel: 'silent',
-	// @ts-ignore The plugin's types have not been updated
-	plugins: [denoPlugin({ importMapURL, loader: 'portable' })],
-}
+		jsxImportSource: denoConfiguration?.compilerOptions
+			?.jsxImportSource,
+		bundle: true,
+		platform: 'neutral',
+		write: false,
+		logLevel: 'silent',
+		// @ts-ignore The plugin's types have not been updated
+		plugins: [
+			denoPlugin({ importMapURL, loader: 'portable' }),
+		],
+	}
 
 const AsyncFunction = async function () {}.constructor
 
 async function getDenoConfiguration() {
-	for (const posibleDenoConfigurationURL of posibleDenoConfigurationURLs!) {
+	for (
+		const posibleDenoConfigurationURL
+			of posibleDenoConfigurationURLs!
+	) {
 		try {
 			return JSON.parse(
 				await readTextFile(posibleDenoConfigurationURL),
@@ -109,7 +122,9 @@ async function buildAndEvaluate(
 	url: URL,
 ) {
 	if (!isDenoCLI) {
-		esbuild.initialize({ worker: typeof Worker !== 'undefined' })
+		esbuild.initialize({
+			worker: typeof Worker !== 'undefined',
+		})
 	}
 
 	const buildResult = await esbuild.build(
@@ -122,11 +137,10 @@ async function buildAndEvaluate(
 
 	const { text = '' } = buildResult.outputFiles![0]
 	const [before, after = '}'] = text.split('export {')
-	const body =
-		stripShebang(before).replaceAll(
-			'import.meta',
-			`{ main: false, url: '${url}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
-		) +
+	const body = stripShebang(before).replaceAll(
+		'import.meta',
+		`{ main: false, url: '${url}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
+	) +
 		'return {' +
 		after.replaceAll(
 			/(?<local>\w+) as (?<exported>\w+)/g,
@@ -146,7 +160,9 @@ async function buildAndEvaluate(
 	const sortedExports = Object.fromEntries(
 		Object.keys(prototypedAndToStringTaggedExports)
 			.sort()
-			.map((key) => [key, prototypedAndToStringTaggedExports[key]]),
+			.map((
+				key,
+			) => [key, prototypedAndToStringTaggedExports[key]]),
 	)
 
 	const sealedExports = Object.seal(sortedExports)
@@ -154,7 +170,9 @@ async function buildAndEvaluate(
 	return sealedExports
 }
 
-export async function importModule<Module = Record<string, unknown>>(
+export async function importModule<
+	Module = Record<string, unknown>,
+>(
 	moduleName: string,
 	{ force = false }: ImportModuleOptions = {},
 ) {
@@ -163,10 +181,15 @@ export async function importModule<Module = Record<string, unknown>>(
 
 		return await import(moduleName)
 	} catch (error) {
-		if (!isDenoCompiled && !isDenoDeploy && error.message !== 'Forced')
+		if (
+			!isDenoCompiled && !isDenoDeploy &&
+			error.message !== 'Forced'
+		) {
 			throw error
+		}
 
-		const base = ErrorStackParser.parse(new Error())[0].fileName
+		const base =
+			ErrorStackParser.parse(new Error())[1].fileName
 
 		const resolved = resolveModuleSpecifier(
 			moduleName,
@@ -178,17 +201,19 @@ export async function importModule<Module = Record<string, unknown>>(
 			{
 				entryPoints: [resolved],
 			},
-
 			new URL(resolved),
 		)) as Module
 	}
 }
 
-export async function importString<Module = Record<string, unknown>>(
+export async function importString<
+	Module = Record<string, unknown>,
+>(
 	moduleString: string,
-
 	{
-		base = new URL(ErrorStackParser.parse(new Error())[0].fileName),
+		base = new URL(
+			ErrorStackParser.parse(new Error())[1].fileName,
+		),
 	}: ImportStringOptions = {},
 ) {
 	return (await buildAndEvaluate(
@@ -199,7 +224,6 @@ export async function importString<Module = Record<string, unknown>>(
 				sourcefile: base.href,
 			},
 		},
-
 		base,
 	)) as Module
 }
