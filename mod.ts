@@ -123,6 +123,7 @@ async function getDenoConfiguration() {
 async function buildAndEvaluate(
 	options: webAssemblyEsbuild.BuildOptions,
 	url: URL,
+	modules: Record<string, unknown> = {}, 
 ) {
 	if (!isDenoCLI && !checkInitialization) {
 		esbuild.initialize({
@@ -151,7 +152,7 @@ async function buildAndEvaluate(
 			'$<exported>: $<local>',
 		)
 
-	const exports = await AsyncFunction(body)()
+	const exports = await AsyncFunction('modules',body)(modules)
 
 	const prototypedAndToStringTaggedExports = Object.assign(
 		Object.create(null),
@@ -218,7 +219,8 @@ export async function importString<
 		base = new URL(
 			ErrorStackParser.parse(new Error())[1].fileName,
 		),
-	}: ImportStringOptions = {},
+		modules={},
+	}: ImportStringOptions & { modules?: Record<string, unknown> }= {},
 ) {
 	return (await buildAndEvaluate(
 		{
@@ -229,5 +231,6 @@ export async function importString<
 			},
 		},
 		base,
+		modules
 	)) as Module
 }
