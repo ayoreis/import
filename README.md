@@ -2,7 +2,7 @@
 
 [Repository](https://github.com/ayoreis/import) • [Registry](https://deno.land/x/import) • [Documentation](https://deno.land/x/import/mod.ts)
 
-A [dynamic imports](//developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) polyfill for [Deno Deploy](https://deno.com/deploy) and [compiled executables](https://deno.land/manual@v1.28.3/tools/compiler).
+A [dynamic imports](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) polyfill for [Deno Deploy](https://deno.com/deploy) and [compiled executables](https://deno.land/manual@v1.28.3/tools/compiler).
 
 ## Example
 
