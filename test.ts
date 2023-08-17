@@ -19,8 +19,8 @@ Deno.test('importString', async () => {
 
 Deno.test('importString with modules', async () => {
 	const { default: renderer } = await importString(
-		`export default function () {
-	const { render } = await dynamicImport('https://deno.land/x/mustache_ts@v0.4.1.1/mustache.tss');
+		`export default async function () {
+	const { render } = await dynamicImport('https://deno.land/x/mustache_ts@v0.4.1.1/mustache.ts');
 
 	const template = '{{foo}}, {{bar}}!'
 	const view = {
