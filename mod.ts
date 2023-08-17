@@ -1,228 +1,223 @@
-import type { DenoConfigurationFile } from './_dependencies.ts'
+import type { DenoConfiguration } from 'https://deno.land/x/configuration@0.2.0/mod.ts';
+
+import { dirname } from 'https://deno.land/std@0.198.0/path/mod.ts';
+import { resolve, toFileUrl } from 'https://deno.land/std@0.198.0/path/mod.ts';
 
 import {
-	denoPlugin,
-	dirname,
-	ErrorStackParser,
-	join,
-	nativeEsbuild,
+	ImportMap,
 	resolveImportMap,
 	resolveModuleSpecifier,
-	stripShebang,
-	toFileUrl,
-	webAssemblyEsbuild,
-} from './_dependencies.ts'
+} from 'https://deno.land/x/importmap@0.2.1/mod.ts';
 
-import { readTextFile } from './_read-text-file.ts'
+import * as nativeEsbuild from 'https://deno.land/x/esbuild@v0.19.1/mod.js';
+import * as webAssemblyEsbuild from 'https://deno.land/x/esbuild@v0.19.1/wasm.js';
+import { denoPlugins } from 'https://deno.land/x/esbuild_deno_loader@0.8.1/mod.ts';
 
-export interface ImportModuleOptions {
+// NOTE Uncomplete
+interface CallSite {
+	getFileName(): string;
+}
+
+declare global {
+	interface ErrorConstructor {
+		stackTraceLimit: number;
+		prepareStackTrace(error: Error, callSites: CallSite[]): unknown;
+	}
+}
+
+export interface DynamicImportOptions {
 	/** Use of the ponyfill when native is available */
-	force?: boolean
+	force?: boolean;
 }
 
 export interface ImportStringOptions {
 	/** URL to use as the base for imports and exports */
-	base?: URL
+	base?: URL;
+
+	/** An object of parameters to pass to into the string */
+	parameters?: Record<string, unknown>;
 }
 
-/**
- * https://deno.com/blog/v1.22#navigatoruseragent
- *
- * https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
- */
-const DENO_USER_AGENT =
-	/^Deno\/(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+const SHEBANG = /^#!.*/;
 
-const isDeno = DENO_USER_AGENT.test(navigator.userAgent)
-const isDenoCLI = isDeno && !!Deno?.run
-const isDenoCompiled = isDeno &&
-	dirname(Deno.execPath()) === Deno.cwd()
-const isDenoDeploy = isDeno && !isDenoCLI &&
-	!!Deno.env.get('DENO_REGION')
-const denoCWDURL = isDeno ? toFileUrl(Deno.cwd()) : null
+const isDenoDeploy = Deno.osRelease() === '0.0.0-00000000-generic';
+const isDenoCLI = !isDenoDeploy;
+const isDenoCompiled = dirname(Deno.execPath()) === Deno.cwd();
 
-const posibleDenoConfigurationURLs = isDeno
-	? ([
-		new URL(`${denoCWDURL}/deno.json`),
-		new URL(`${denoCWDURL}/deno.jsonc`),
-	] as const)
-	: null
+let configuration: DenoConfiguration | null = null;
+let configurationPath: string | null = null;
 
-const denoConfiguration = isDeno
-	? await getDenoConfiguration()
-	: null
+for (const filename of ['deno.json', 'deno.jsonc'] as const) {
+	try {
+		configuration = JSON.parse(
+			await Deno.readTextFile(filename),
+		) as DenoConfiguration;
 
-const importMapURL = denoConfiguration?.importMap
-	? toFileUrl(join(Deno.cwd(), denoConfiguration.importMap))
-	: undefined
+		configurationPath = resolve(filename);
 
-const importMap = importMapURL
-	? resolveImportMap(
-		JSON.parse(await readTextFile(importMapURL)),
-		importMapURL,
-	)
-	: null
+		break;
+	} catch (error) {
+		if (error instanceof Deno.errors.NotFound) continue;
+
+		throw error;
+	}
+}
+
+let importMap: ImportMap | null = null;
+const { imports, scopes, importMap: importMapFilepath } = configuration ?? {};
+
+if (imports || scopes) importMap = { imports, scopes };
+
+const importMapUrl = importMapFilepath
+	? toFileUrl(resolve(importMapFilepath))
+	: null;
+
+if (importMapFilepath) {
+	importMap = resolveImportMap(
+		JSON.parse(
+			await Deno.readTextFile(importMapFilepath),
+		),
+		importMapUrl!,
+	);
+}
 
 const esbuild: typeof webAssemblyEsbuild = isDenoCLI
 	? nativeEsbuild
-	: webAssemblyEsbuild
+	: webAssemblyEsbuild;
 
-let checkInitialization: boolean = false;
+let esbuildInitialized = false;
 
+const esbuildOptions: webAssemblyEsbuild.BuildOptions = {
+	bundle: true,
+	platform: 'neutral',
+	tsconfig: configurationPath ?? undefined,
+	format: 'esm',
+	write: false,
+	ignoreAnnotations: true,
+	keepNames: true,
+	treeShaking: false,
+	logLevel: 'error',
 
-const sharedEsbuildOptions:
-	webAssemblyEsbuild.BuildOptions = {
-		jsx: {
-			'preserve': 'preserve',
-			'react': 'transform',
-			'react-jsx': 'automatic',
-			'react-jsxdev': 'automatic',
-			'react-native': 'preserve',
-		}[
-			denoConfiguration?.compilerOptions?.jsx ?? 'react'
-		] as webAssemblyEsbuild.BuildOptions['jsx'],
+	// @ts-ignore The types are not synchronized
+	plugins: denoPlugins({
+		configPath: configurationPath ?? undefined,
+		importMapURL: configurationPath
+			? undefined
+			: (importMapUrl?.href ?? undefined),
+		loader: 'portable',
+	}),
+};
 
-		jsxDev: denoConfiguration?.compilerOptions?.jsx ===
-			'react-jsxdev',
-		jsxFactory:
-			denoConfiguration?.compilerOptions?.jsxFactory ?? 'h',
+const AsyncFunction = async function () {}.constructor;
 
-		jsxFragment: denoConfiguration?.compilerOptions
-			?.jsxFragmentFactory ?? 'Fragment',
+function customPrepareStackTrace(_error: Error, callSites: CallSite[]) {
+	return callSites.at(2)!.getFileName();
+}
 
-		jsxImportSource: denoConfiguration?.compilerOptions
-			?.jsxImportSource,
-		bundle: true,
-		platform: 'neutral',
-		write: false,
-		logLevel: 'silent',
-		// @ts-ignore The plugin's types have not been updated
-		plugins: [
-			denoPlugin({ importMapURL, loader: 'portable' }),
-		],
-	}
+function getCallerUrl() {
+	const { stackTraceLimit, prepareStackTrace } = Error;
 
-const AsyncFunction = async function () {}.constructor
+	Error.stackTraceLimit = Infinity;
+	Error.prepareStackTrace = customPrepareStackTrace;
 
-async function getDenoConfiguration() {
-	for (
-		const posibleDenoConfigurationURL
-			of posibleDenoConfigurationURLs!
-	) {
-		try {
-			return JSON.parse(
-				await readTextFile(posibleDenoConfigurationURL),
-			) as DenoConfigurationFile
-			// deno-lint-ignore no-empty
-		} catch {}
-	}
+	const callerUrl = new URL(new Error().stack!);
 
-	return null
+	Error.stackTraceLimit = stackTraceLimit;
+	Error.prepareStackTrace = prepareStackTrace;
+
+	return callerUrl;
 }
 
 async function buildAndEvaluate(
 	options: webAssemblyEsbuild.BuildOptions,
-	url: URL,
-	modules: Record<string, unknown> = {}, 
+	filepath: string,
+	modules: Record<string, unknown> = {},
 ) {
-	if (!isDenoCLI && !checkInitialization) {
+	if (!isDenoCLI && !esbuildInitialized) {
 		esbuild.initialize({
 			worker: typeof Worker !== 'undefined',
-		})
-		checkInitialization=true;
+		});
+
+		esbuildInitialized = true;
 	}
 
 	const buildResult = await esbuild.build(
-		Object.assign({}, sharedEsbuildOptions, options),
-	)
+		Object.assign({}, esbuildOptions, options),
+	);
 
-	if (isDenoCLI) {
-		esbuild.stop()
-	}
+	if (isDenoCLI) esbuild.stop();
 
-	const { text = '' } = buildResult.outputFiles![0]
-	const [before, after = '}'] = text.split('export {')
-	const body = stripShebang(before).replaceAll(
-		'import.meta',
-		`{ main: false, url: '${url}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
-	) +
+	const { text } = buildResult.outputFiles![0];
+	const [before, after = '}'] = text.split('export {');
+
+	const body = before.replace(SHEBANG, '')
+		// TODO make `import.meta.resolve` use `resolveModuleSpecifier`
+		// TODO only create object once and then reference it
+		.replaceAll(
+			'import.meta',
+			`{ main: false, url: '${filepath}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
+		) +
 		'return {' +
+		// TODO tmprove regexes to correctly handle names and string literals
 		after.replaceAll(
 			/(?<local>\w+) as (?<exported>\w+)/g,
 			'$<exported>: $<local>',
-		)
+		);
 
-	const exports = await AsyncFunction('modules',body)(modules)
+	const exports = await AsyncFunction(...Object.keys(modules), body)(
+		...Object.values(modules),
+	);
 
-	const prototypedAndToStringTaggedExports = Object.assign(
-		Object.create(null),
-		exports,
-		{
-			[Symbol.toStringTag]: 'Module',
-		},
-	)
+	const toStringTaggedExports = Object.assign({
+		[Symbol.toStringTag]: 'Module',
+	}, exports);
 
 	const sortedExports = Object.fromEntries(
-		Object.keys(prototypedAndToStringTaggedExports)
+		Object.keys(toStringTaggedExports)
 			.sort()
-			.map((
-				key,
-			) => [key, prototypedAndToStringTaggedExports[key]]),
-	)
+			.map((key) => [key, toStringTaggedExports[key]]),
+	);
 
-	const sealedExports = Object.seal(sortedExports)
+	const prototypedExports = Object.assign(Object.create(null), sortedExports);
+	const sealedExports = Object.seal(prototypedExports);
 
-	return sealedExports
+	return sealedExports;
 }
 
-export async function importModule<
-	Module = Record<string, unknown>,
->(
+export async function dynamicImport(
 	moduleName: string,
-	{ force = false }: ImportModuleOptions = {},
+	{ force = false }: DynamicImportOptions = {},
 ) {
 	try {
-		if (force) throw new Error('Forced')
+		if (force) throw new Error('Forced');
 
-		return await import(moduleName)
+		return await import(moduleName);
 	} catch (error) {
 		if (
 			!isDenoCompiled && !isDenoDeploy &&
 			error.message !== 'Forced'
 		) {
-			throw error
+			throw error;
 		}
 
-		const base =
-			ErrorStackParser.parse(new Error())[1].fileName
+		const base = getCallerUrl();
+		const filename = resolveModuleSpecifier(moduleName, importMap ?? {}, base);
 
-		const resolved = resolveModuleSpecifier(
-			moduleName,
-			importMap ?? {},
-			base,
-		)
-
-		return (await buildAndEvaluate(
-			{
-				entryPoints: [resolved],
-			},
-			new URL(resolved),
-		)) as Module
+		return await buildAndEvaluate(
+			{ entryPoints: [filename] },
+			filename,
+		);
 	}
 }
 
-export async function importString<
-	Module = Record<string, unknown>,
->(
+export async function importString(
 	moduleString: string,
 	{
-		base = new URL(
-			ErrorStackParser.parse(new Error())[1].fileName,
-		),
-		modules={},
-	}: ImportStringOptions & { modules?: Record<string, unknown> }= {},
+		base = getCallerUrl(),
+		parameters = {},
+	}: ImportStringOptions = {},
 ) {
-	return (await buildAndEvaluate(
+	return await buildAndEvaluate(
 		{
 			stdin: {
 				contents: moduleString,
@@ -230,7 +225,7 @@ export async function importString<
 				sourcefile: base.href,
 			},
 		},
-		base,
-		modules
-	)) as Module
+		base.href,
+		parameters,
+	);
 }

@@ -1,39 +1,38 @@
-import { importModule, importString } from './mod.ts'
+import { dynamicImport, importString } from './mod.ts';
 
 Deno.test('`importModule`', async () => {
-	console.log(await importModule('test', { force: true }))
+	console.log(await dynamicImport('test', { force: true }));
 
 	console.log(
-		await importModule(
+		await dynamicImport(
 			'https://api.observablehq.com/d/6388e91a5ea79803.js?v=3',
 			{
 				force: true,
 			},
 		),
-	)
-})
-
-Deno.test("importString", async () => {
-  console.log(await importString('export const foo = "bar"'));
+	);
 });
 
-Deno.test('importStringWithModules', async () => {
-	let { default: renderer } = await importString(`
-    const renderer = async ()=>{
+Deno.test('importString', async () => {
+	console.log(await importString('export const foo = \'bar\''));
+});
 
-      const { render } = await modules.importModule('https://deno.land/x/mustache_ts/mustache.ts');
+Deno.test('importString with modules', async () => {
+	const { default: renderer } = await importString(
+		`export default function () {
+	const { render } = await dynamicImport('https://deno.land/x/mustache_ts@v0.4.1.1/mustache.tss');
 
-      const template = '{{foo}}, {{bar}}!'
-      const view = {
-          foo: 'Hello',
-          bar: 'World!'
-      }
-      const output = render(template, view)
-      return output;
-    };
-    export default renderer;
-  `,
-		{ modules: { importModule } },
-	)
-  console.log(await renderer())
-})
+	const template = '{{foo}}, {{bar}}!'
+	const view = {
+		foo: 'Hello',
+		bar: 'World!'
+	}
+	const output = render(template, view)
+
+	return output;
+};`,
+		{ parameters: { dynamicImport } },
+	);
+
+	console.log(await renderer());
+});

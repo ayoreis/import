@@ -5,16 +5,12 @@
 
 	"fmt": {
 		"options": {
-			"lineWidth": 60,
-			"semiColons": false,
+			"proseWrap": "never",
 			"singleQuote": true,
 			"useTabs": true
 		}
 	},
 
 	"importMap": "./import-map.json",
-
-	"tasks": {
-		"test": "deno test -A"
-	}
+	"lock": false
 }
