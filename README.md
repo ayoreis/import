@@ -6,9 +6,11 @@ A [dynamic imports](//developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/
 
 ## Example
 
-> [!NOTE] JSX and import maps will work if configured in `deno.json[c]`.
+> [!NOTE]
+> JSX and import maps will work if configured in `deno.json[c]`.
 
-> [!IMPORTANT] Use [statically analyzable imports](https://deno.com/deploy/changelog#statically-analyzable-dynamic-imports) when posible to avoid doing unnecessary work.
+> [!IMPORTANT]
+> Use [statically analyzable imports](https://deno.com/deploy/changelog#statically-analyzable-dynamic-imports) when posible to avoid doing unnecessary work.
 
 ```ts
 import { dynamicImport } from 'https://deno.land/x/import/mod.ts';

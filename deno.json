@@ -5,7 +5,7 @@
 
 	"fmt": {
 		"options": {
-			"proseWrap": "never",
+			"proseWrap": "preserve",
 			"singleQuote": true,
 			"useTabs": true
 		}
