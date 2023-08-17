@@ -15,11 +15,7 @@ A [dynamic imports](//developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/
 ```typescript
 import { dynamicImport } from 'https://deno.land/x/import/mod.ts';
 
-if (Math.random() > 0.5) {
-	await dynamicImport('./foo.ts');
-} else {
-	await dynamicImport('./bar.ts');
-}
+await dynamicImport(Math.random() < 0.5 ? './foo.ts' : './bar.ts');
 ```
 
 It also has a function to evaluates modules from strings.
