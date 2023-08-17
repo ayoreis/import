@@ -18,7 +18,7 @@ import { dynamicImport } from 'https://deno.land/x/import/mod.ts';
 await dynamicImport(Math.random() < 0.5 ? './foo.ts' : './bar.ts');
 ```
 
-It also has a function to evaluates modules from strings.
+It also has a function to evaluate modules from strings.
 
 ```typescript
 import { importString } from 'https://deno.land/x/import/mod.ts';
@@ -26,7 +26,7 @@ import { importString } from 'https://deno.land/x/import/mod.ts';
 console.log(await importString('export const foo = "bar"'));
 ```
 
-You can also pass parameters to it.
+And you can pass parameters to them.
 
 ```typescript
 console.log(
@@ -34,7 +34,6 @@ console.log(
 );
 ```
 
-<br/>
 <br/>
 
 🦕 Happy dynamic importing!
