@@ -108,10 +108,10 @@ const esbuildOptions: webAssemblyEsbuild.BuildOptions = {
 	}),
 };
 
-const AsyncFunction = async function () {}.constructor;
+const AsyncFunction = async function() { }.constructor;
 
 function customPrepareStackTrace(_error: Error, callSites: CallSite[]) {
-	return callSites.at(2)!.getFileName();
+	return callSites[2] && callSites[2].getFileName();
 }
 
 function getCallerUrl() {
@@ -120,12 +120,16 @@ function getCallerUrl() {
 	Error.stackTraceLimit = Infinity;
 	Error.prepareStackTrace = customPrepareStackTrace;
 
-	const callerUrl = new URL(new Error().stack!);
+	const callerFile = new Error().stack;
 
 	Error.stackTraceLimit = stackTraceLimit;
 	Error.prepareStackTrace = prepareStackTrace;
 
-	return callerUrl;
+	if (callerFile) {
+		return new URL(callerFile);
+	} else {
+		return new URL(import.meta.url);
+	}
 }
 
 async function buildAndEvaluate(
