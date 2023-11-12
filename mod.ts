@@ -141,9 +141,21 @@ async function buildAndEvaluate(
 		esbuildInitialized = true;
 	}
 
-	const buildResult = await esbuild.build(
-		Object.assign({}, esbuildOptions, options),
-	);
+	let buildResult;
+	
+	const kv = await Deno.openKv();
+	const cacheKey = ["build-cache", filepath];
+	const cachedEntry = await kv.get(cacheKey);
+
+	if (cachedEntry) {
+		buildResult = cachedEntry.value;
+	} else {
+		buildResult = await esbuild.build(
+			Object.assign({}, esbuildOptions, options),
+		);
+
+		await kv.set(cacheKey, buildResult);
+	}
 
 	if (isDenoCLI) esbuild.stop();
 
