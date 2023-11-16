@@ -141,28 +141,49 @@ async function buildAndEvaluate(
 		esbuildInitialized = true;
 	}
 
-	const buildResult = await esbuild.build(
-		Object.assign({}, esbuildOptions, options),
-	);
+	let kv: Deno.KV;
+	let cachedEntry: Uint8Array;
+	const cacheKey = ["dynamic-import", filepath];
 
-	if (isDenoCLI) esbuild.stop();
+	if (options?.stdin?.sourcefile != filepath) {
+		kv = await Deno.openKv();
+		cachedEntry = await kvToolbox.get(kv, cacheKey);
+	}
 
-	const { text } = buildResult.outputFiles![0];
-	const [before, after = '}'] = text.split('export {');
+	let body;
 
-	const body = before.replace(SHEBANG, '')
-		// TODO make `import.meta.resolve` use `resolveModuleSpecifier`
-		// TODO only create object once and then reference it
-		.replaceAll(
-			'import.meta',
-			`{ main: false, url: '${filepath}', resolve(specifier) { return new URL(specifier, this.url).href } }`,
-		) +
-		'return {' +
-		// TODO tmprove regexes to correctly handle names and string literals
-		after.replaceAll(
-			/(?<local>\w+) as (?<exported>\w+)/g,
-			'$<exported>: $<local>',
+	if (cachedEntry) {
+		body = new TextDecoder().decode(cachedEntry);
+	} else {
+		const buildResult = await esbuild.build(
+			Object.assign({}, esbuildOptions, options),
 		);
+
+		const { text } = buildResult.outputFiles![0];
+		const [before, after = '}'] = text.split('export {');
+		body = before.replace(SHEBANG, '')
+			.replaceAll(
+				'import.meta',
+				`{
+			        main: false,
+			        url: '${filepath}',
+			        resolve(specifier) {
+			          return new URL(specifier, this.url).href
+			        }
+			      }`
+			) +
+			'return {' +
+			after.replaceAll(
+				/(?<local>\w+) as (?<exported>\w+)/g,
+				'$<exported>: $<local>',
+			);
+
+		if (kv) {
+			const blob = new TextEncoder().encode(body);
+			await kvToolbox.set(kv, cacheKey, blob);
+			await kv.close();
+		}
+	}
 
 	const exports = await AsyncFunction(...Object.keys(modules), body)(
 		...Object.values(modules),
