@@ -90,7 +90,7 @@ let esbuildInitialized = false;
 const esbuildOptions: webAssemblyEsbuild.BuildOptions = {
 	bundle: true,
 	platform: 'neutral',
-	tsconfig: configurationPath ?? undefined,
+	tsconfigRaw: configuration ?? undefined,
 	format: 'esm',
 	write: false,
 	ignoreAnnotations: true,
