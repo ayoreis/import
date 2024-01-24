@@ -1,4 +1,4 @@
-# Dynamic import ponyfill
+# Dynamic import polyfill
 
 [Repository](https://github.com/ayoreis/import) • [Registry](https://deno.land/x/import) • [Documentation](https://deno.land/x/import/mod.ts)
 
